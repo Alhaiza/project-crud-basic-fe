@@ -8,4 +8,10 @@ export default defineNuxtConfig({
   vite: {
     plugins: [tailwindcss()],
   },
+  runtimeConfig: {
+    public: {
+      // 5. Helper Endpoint: Base URL API Backend (otomatis di-override oleh env NUXT_PUBLIC_API_BASE)
+      apiBase: 'http://localhost:8000/api',
+    },
+  },
 })
