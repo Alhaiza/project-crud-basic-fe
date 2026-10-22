@@ -40,6 +40,26 @@ const form = reactive({
   price: 0,
 })
 
+// State untuk tampilan harga dengan titik ribuan (misal: "10.000")
+const displayPrice = ref('')
+
+// Handler input harga: otomatis memberi titik ribuan (10000 -> 10.000) dan menyimpan angka murni ke form.price
+const handlePriceInput = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  // Hapus semua karakter selain angka
+  const rawDigits = target.value.replace(/[^0-9]/g, '')
+
+  if (rawDigits) {
+    // Simpan nilai angka murni ke form.price agar valid untuk backend Laravel (numeric)
+    form.price = parseInt(rawDigits, 10)
+    // Format angka ke string berpemisah titik ribuan Indonesia (contoh: "10.000")
+    displayPrice.value = Number(rawDigits).toLocaleString('id-ID')
+  } else {
+    form.price = 0
+    displayPrice.value = ''
+  }
+}
+
 // State penanda loading saat tombol simpan di modal sedang memproses request ke server
 const isSaving = ref(false)
 
@@ -68,6 +88,7 @@ const openCreateModal = () => {
   editingId.value = null
   form.name = ''
   form.price = 0
+  displayPrice.value = '' // Reset tampilan harga menjadi kosong
   modalError.value = ''
   isModalOpen.value = true // Memicu modal pop-out
 }
@@ -79,6 +100,8 @@ const openEditModal = (item: any) => {
   editingId.value = item.id
   form.name = item.name
   form.price = Number(item.price)
+  // Format harga produk yang ada ke format titik ribuan (contoh: 10000 -> "10.000")
+  displayPrice.value = Number(item.price).toLocaleString('id-ID')
   modalError.value = ''
   isModalOpen.value = true // Memicu modal pop-out
 }
@@ -407,20 +430,30 @@ onMounted(async () => {
                 />
               </div>
 
-              <!-- Field Input Harga Produk -->
+              <!-- Field Input Harga Produk dengan Pemisah Titik Ribuan Otomatis (Contoh: 10000 -> 10.000) -->
               <div>
                 <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Harga Satuan (Rupiah) <span class="text-rose-500">*</span>
                 </label>
-                <!-- v-model.number: otomatis mengubah input string ke format angka JavaScript -->
-                <input
-                  v-model.number="form.price"
-                  type="number"
-                  min="0"
-                  required
-                  placeholder="Contoh: 25000"
-                  class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-150"
-                />
+                <!-- Container ber-prefix Rp di sebelah kiri -->
+                <div class="relative">
+                  <!-- Prefix label "Rp" tetap di kiri input -->
+                  <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-sm font-semibold text-slate-400 pointer-events-none">
+                    Rp
+                  </span>
+                  <!-- Input type="text" dengan inputmode="numeric" untuk menampilkan titik ribuan -->
+                  <!-- :value="displayPrice": menampilkan format visual ribuan (contoh: "10.000") -->
+                  <!-- @input="handlePriceInput": memformat otomatis setiap ketikan dan menyimpan angka murni di form.price -->
+                  <input
+                    :value="displayPrice"
+                    @input="handlePriceInput"
+                    type="text"
+                    inputmode="numeric"
+                    required
+                    placeholder="Contoh: 25.000"
+                    class="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-150"
+                  />
+                </div>
               </div>
 
               <!-- FOOTER MODAL (TOMBOL AKSI BATAL & SIMPAN): -->
