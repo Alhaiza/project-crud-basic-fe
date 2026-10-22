@@ -1,10 +1,10 @@
 <template>
-  <!-- Wrapper utama aplikasi: min-h-screen = tinggi 100vh, bg-gray-50 = latar abu-abu muda, text-gray-900 = warna font gelap -->
-  <div class="min-h-screen bg-gray-50 text-gray-900">
-    <!-- Komponen bawaan Nuxt untuk aksesibilitas navigasi pembaca layar (screen reader) -->
+  <!-- Wrapper utama: min-h-screen (tinggi minimal layar penuh), bg-slate-50 (latar abu-abu netral modern), text-slate-800 (warna teks tajam), antialiased (penghalusan font browser) -->
+  <div class="min-h-screen bg-slate-50 text-slate-800 antialiased font-sans">
+    <!-- Aksesibilitas navigasi bawaan Nuxt untuk screen reader -->
     <NuxtRouteAnnouncer />
 
-    <!-- NuxtPage bertugas me-render komponen halaman dinamis yang ada di folder app/pages/ -->
+    <!-- Me-render halaman aktif (pages/index.vue, pages/login.vue, dll) -->
     <NuxtPage />
   </div>
 </template>
