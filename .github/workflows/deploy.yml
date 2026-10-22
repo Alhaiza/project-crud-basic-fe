@@ -1,0 +1,35 @@
+name: Auto Deploy Frontend (Nuxt 4)
+
+on:
+  push:
+    branches:
+      - main
+
+# Batasi hanya 1 proses deploy yang berjalan bersamaan (mencegah tabrakan build)
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to VPS Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Eksekusi Deployment via SSH ke VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            echo "==> [CI/CD] Menarik kode terbaru Frontend Nuxt 4..."
+            cd /var/www/app-crud/crud-fe
+            git pull origin main
+
+            echo "==> [CI/CD] Membangun ulang kontainer frontend via crud-docker..."
+            cd ../crud-docker
+            docker compose up -d --build --no-deps frontend
+
+            echo "==> [CI/CD] Frontend berhasil di-deploy dan live!"
