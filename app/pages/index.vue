@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 1. Menerapkan middleware rute 'auth': memastikan hanya pengguna terautentikasi yang bisa membuka halaman ini
+// 1. Menerapkan middleware rute 'auth': memastikan hanya pengguna terautentikasi yang bisa mengakses halaman ini
 definePageMeta({
   middleware: 'auth',
 })
@@ -7,66 +7,28 @@ definePageMeta({
 // 2. Mengakses instance $api kustom yang sudah diinjeksi oleh Nuxt plugin
 const { $api } = useNuxtApp()
 
-// 3. Mengakses data profil user, fungsi fetchUser, dan logout dari composable helper useAuth
+// 3. Mengakses data profil user, fungsi fetchUser, dan logout dari composable useAuth
 const { user, fetchUser, logout } = useAuth()
 
-// 3b. Mengakses helper notifikasi toast global untuk menampilkan respon di kanan atas layar
+// 4. Mengakses helper notifikasi toast global untuk menampilkan respon di kanan atas layar
 const toast = useToast()
 
-// 4. State reaktif untuk menyimpan daftar produk dari backend
+// 5. State reaktif untuk menyimpan daftar produk dari backend
 const products = ref<any[]>([])
 
-// 5. State penanda loading saat aplikasi sedang melakukan fetch data dari API
+// 6. State penanda loading saat aplikasi sedang melakukan fetch data dari API
 const isLoading = ref(true)
 
 // =========================================================================
-// STATE MANAGEMENT MODAL (PENGGANTI BOOTSTRAP MODAL data-bs-toggle="modal")
+// STATE MANAGEMENT MODAL
 // =========================================================================
-// Di Bootstrap, modal dibuka/tutup menggunakan manipulasi DOM jQuery atau data attributes.
-// Di Vue/Nuxt, modal dikendalikan murni oleh "Reactivity State" di bawah ini:
-// isModalOpen bernilai true  -> Modal muncul (pop-out) ke layar.
-// isModalOpen bernilai false -> Modal lenyap dari layar (v-if menghapusnya dari DOM).
+// isModalOpen: Saklar buka/tutup modal (true = muncul pop-out, false = tertutup)
 const isModalOpen = ref(false)
 
-// Penanda mode modal: true = Edit Produk (PUT), false = Tambah Produk Baru (POST)
-const isEditing = ref(false)
+// selectedProduct: Menyimpan data produk yang sedang diedit (null jika sedang mode tambah baru)
+const selectedProduct = ref<any | null>(null)
 
-// Menyimpan ID produk yang sedang aktif diedit (null jika sedang mode tambah baru)
-const editingId = ref<number | null>(null)
-
-// State reaktif form untuk menampung input user (nama & harga produk)
-const form = reactive({
-  name: '',
-  price: 0,
-})
-
-// State untuk tampilan harga dengan titik ribuan (misal: "10.000")
-const displayPrice = ref('')
-
-// Handler input harga: otomatis memberi titik ribuan (10000 -> 10.000) dan menyimpan angka murni ke form.price
-const handlePriceInput = (event: Event) => {
-  const target = event.target as HTMLInputElement
-  // Hapus semua karakter selain angka
-  const rawDigits = target.value.replace(/[^0-9]/g, '')
-
-  if (rawDigits) {
-    // Simpan nilai angka murni ke form.price agar valid untuk backend Laravel (numeric)
-    form.price = parseInt(rawDigits, 10)
-    // Format angka ke string berpemisah titik ribuan Indonesia (contoh: "10.000")
-    displayPrice.value = Number(rawDigits).toLocaleString('id-ID')
-  } else {
-    form.price = 0
-    displayPrice.value = ''
-  }
-}
-
-// State penanda loading saat tombol simpan di modal sedang memproses request ke server
-const isSaving = ref(false)
-
-// State untuk menampung pesan error dari backend jika validasi gagal
-const modalError = ref('')
-
-// 6. Fungsi mengambil data produk dari endpoint GET /api/products
+// 7. Fungsi mengambil data produk dari endpoint GET /api/products
 const loadProducts = async () => {
   isLoading.value = true
   try {
@@ -81,74 +43,22 @@ const loadProducts = async () => {
   }
 }
 
-// 7. Fungsi membuka modal untuk mode "Tambah Produk Baru"
-// Logika: Reset isi form, set isEditing = false, lalu ubah isModalOpen = true
+// 8. Fungsi membuka modal untuk mode "Tambah Produk Baru"
 const openCreateModal = () => {
-  isEditing.value = false
-  editingId.value = null
-  form.name = ''
-  form.price = 0
-  displayPrice.value = '' // Reset tampilan harga menjadi kosong
-  modalError.value = ''
-  isModalOpen.value = true // Memicu modal pop-out
+  selectedProduct.value = null // null menandakan mode Create (POST)
+  isModalOpen.value = true     // Membuka modal
 }
 
-// 8. Fungsi membuka modal untuk mode "Edit Produk"
-// Logika: Isi form dengan data yang dipilih, set isEditing = true, lalu ubah isModalOpen = true
+// 9. Fungsi membuka modal untuk mode "Edit Produk"
 const openEditModal = (item: any) => {
-  isEditing.value = true
-  editingId.value = item.id
-  form.name = item.name
-  form.price = Number(item.price)
-  // Format harga produk yang ada ke format titik ribuan (contoh: 10000 -> "10.000")
-  displayPrice.value = Number(item.price).toLocaleString('id-ID')
-  modalError.value = ''
-  isModalOpen.value = true // Memicu modal pop-out
+  selectedProduct.value = item // Berisi data produk menandakan mode Update (PUT)
+  isModalOpen.value = true     // Membuka modal
 }
 
-// 9. Fungsi menutup modal
-// Logika: Cukup ubah isModalOpen = false, v-if otomatis menghilangkan modal dari DOM
+// 10. Fungsi menutup modal
 const closeModal = () => {
   isModalOpen.value = false
-}
-
-// 10. Fungsi submit form modal (Bisa POST untuk Tambah, atau PUT untuk Edit)
-const handleSaveProduct = async () => {
-  modalError.value = ''
-  isSaving.value = true
-
-  try {
-    if (isEditing.value && editingId.value) {
-      // Jika mode edit: Panggil PUT /api/products/{id}
-      await $api(`/products/${editingId.value}`, {
-        method: 'PUT',
-        body: form,
-      })
-      // Notifikasi toast HIJAU (sukses update)
-      toast.success('Data produk berhasil diperbarui!')
-    } else {
-      // Jika mode tambah: Panggil POST /api/products
-      await $api('/products', {
-        method: 'POST',
-        body: form,
-      })
-      // Notifikasi toast HIJAU (sukses tambah baru)
-      toast.success('Produk baru berhasil ditambahkan!')
-    }
-
-    // Tutup pop-out modal setelah berhasil simpan
-    closeModal()
-    // Muat ulang tabel dengan data terbaru dari database
-    await loadProducts()
-  } catch (err: any) {
-    // Menangkap pesan validasi error dari Laravel
-    const errorMsg = err?.data?.message || 'Gagal menyimpan data produk.'
-    modalError.value = errorMsg
-    // Notifikasi toast MERAH (error)
-    toast.error(errorMsg)
-  } finally {
-    isSaving.value = false
-  }
+  selectedProduct.value = null
 }
 
 // 11. Fungsi menghapus produk via endpoint DELETE /api/products/{id}
@@ -158,12 +68,10 @@ const handleDeleteProduct = async (id: number, name: string) => {
 
   try {
     await $api(`/products/${id}`, { method: 'DELETE' })
-    // Notifikasi toast HIJAU (sukses hapus)
     toast.success(`Produk "${name}" berhasil dihapus!`)
     // Muat ulang data setelah dihapus
     await loadProducts()
   } catch (error) {
-    // Notifikasi toast MERAH (gagal hapus)
     toast.error('Gagal menghapus produk dari server.')
   }
 }
@@ -351,150 +259,15 @@ onMounted(async () => {
     </div>
 
     <!-- ========================================================================= -->
-    <!-- MODAL POP-OUT (DIPINDAHKAN LANGSUNG KE <body> VIA <Teleport to="body">)   -->
-    <!-- Persis seperti modal-backdrop di Bootstrap tapi dikendalikan State Vue    -->
+    <!-- KOMPONEN MODAL PRODUK MANDIRI (OTOMATIS DI-IMPORT DARI components/)       -->
+    <!-- Menangani Tambah (Create) dan Edit (Update) dalam satu modal tunggal       -->
     <!-- ========================================================================= -->
-    <Teleport to="body">
-      <!-- Transition bawaan Vue untuk efek animasi Pop-Out halus (zoom-in & fade) saat muncul -->
-      <Transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="opacity-0 scale-95"
-        enter-to-class="opacity-100 scale-100"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="opacity-100 scale-100"
-        leave-to-class="opacity-0 scale-95"
-      >
-        <!-- BACKDROP OVERLAY LAYAR PENUH: -->
-        <!-- v-if="isModalOpen": Muncul HANYA jika isModalOpen bernilai true -->
-        <!-- fixed inset-0 (posisi absolut ke seluruh viewport layar), z-50 (lapisan tertinggi di atas semua elemen), bg-slate-900/60 (latar hitam transparan 60%), backdrop-blur-sm (efek blur kaca lembut pada background), flex items-center justify-center (menempatkan kartu modal tepat di tengah-tengah layar), p-4 (padding aman di perangkat mobile) -->
-        <!-- @click.self="closeModal": Menutup modal jika pengguna mengklik area luar modal (backdrop) seperti Bootstrap -->
-        <div
-          v-if="isModalOpen"
-          @click.self="closeModal"
-          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-        >
-          <!-- KARTU DIALOG MODAL (POP-OUT CARD): -->
-          <!-- relative (posisi relatif), w-full (lebar 100%), max-w-lg (maksimal lebar 32rem/512px), bg-white (latar kartu putih pekat), rounded-2xl (sudut tumpul halus), shadow-2xl (efek bayangan melayang tebal), border border-slate-100 (garis border tipis), overflow-hidden (sudut rapi) -->
-          <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
-            
-            <!-- HEADER MODAL: -->
-            <!-- flex justify-between items-center (posisi judul di kiri, tombol silang di kanan), px-6 py-5 (padding dalam), border-b border-slate-100 (garis pemisah bawah) -->
-            <div class="flex justify-between items-center px-6 py-5 border-b border-slate-100 bg-slate-50/50">
-              <div>
-                <!-- Judul Modal dinamis berdasarkan state isEditing -->
-                <h3 class="text-lg font-bold text-slate-900">
-                  {{ isEditing ? 'Edit Informasi Produk' : 'Tambah Produk Baru' }}
-                </h3>
-                <p class="text-xs text-slate-500 mt-0.5">
-                  {{ isEditing ? 'Perbarui data nama dan harga produk di bawah ini.' : 'Masukkan nama dan harga untuk membuat produk baru.' }}
-                </p>
-              </div>
-
-              <!-- Tombol Silang (X) Penutup Modal: -->
-              <!-- text-slate-400 (warna abu-abu), hover:text-slate-600 (lebih gelap saat hover), hover:bg-slate-100 (lingkaran abu-abu saat hover), p-2 (padding tombol), rounded-xl (lingkaran tumpul) -->
-              <button
-                type="button"
-                @click="closeModal"
-                class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-xl transition duration-150 cursor-pointer"
-              >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <!-- BODY MODAL: Form Input -->
-            <!-- p-6 (padding 1.5rem), space-y-4 (jarak vertikal 1rem antar-input form) -->
-            <form @submit.prevent="handleSaveProduct" class="p-6 space-y-4">
-              
-              <!-- Pesan Error Validasi Modal (jika gagal) -->
-              <div v-if="modalError" class="p-3.5 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl text-xs flex items-center gap-2">
-                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>{{ modalError }}</span>
-              </div>
-
-              <!-- Field Input Nama Produk -->
-              <div>
-                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Nama Produk <span class="text-rose-500">*</span>
-                </label>
-                <!-- w-full (lebar 100%), px-4 py-2.5 (padding input), border border-slate-300 (garis border standar), rounded-xl (sudut melengkung halus), text-sm (font 14px), focus:ring-2 focus:ring-indigo-500 focus:border-transparent (outline fokus berwarna biru indigo saat kursor aktif) -->
-                <input
-                  v-model="form.name"
-                  type="text"
-                  required
-                  placeholder="Contoh: Kopi Robusta Premium"
-                  class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-150"
-                />
-              </div>
-
-              <!-- Field Input Harga Produk dengan Pemisah Titik Ribuan Otomatis (Contoh: 10000 -> 10.000) -->
-              <div>
-                <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Harga Satuan (Rupiah) <span class="text-rose-500">*</span>
-                </label>
-                <!-- Container ber-prefix Rp di sebelah kiri -->
-                <div class="relative">
-                  <!-- Prefix label "Rp" tetap di kiri input -->
-                  <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-sm font-semibold text-slate-400 pointer-events-none">
-                    Rp
-                  </span>
-                  <!-- Input type="text" dengan inputmode="numeric" untuk menampilkan titik ribuan -->
-                  <!-- :value="displayPrice": menampilkan format visual ribuan (contoh: "10.000") -->
-                  <!-- @input="handlePriceInput": memformat otomatis setiap ketikan dan menyimpan angka murni di form.price -->
-                  <input
-                    :value="displayPrice"
-                    @input="handlePriceInput"
-                    type="text"
-                    inputmode="numeric"
-                    required
-                    placeholder="Contoh: 25.000"
-                    class="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-150"
-                  />
-                </div>
-              </div>
-
-              <!-- FOOTER MODAL (TOMBOL AKSI BATAL & SIMPAN): -->
-              <!-- flex justify-end gap-3 (menata tombol di kanan dengan jarak 0.75rem), pt-4 (padding atas), border-t border-slate-100 (garis batas atas) -->
-              <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <!-- Tombol Batal: Menutup modal dengan @click="closeModal" -->
-                <!-- px-4 py-2.5 (padding), text-sm font-medium (font sedang), text-slate-700 (teks abu-abu), bg-white (latar putih), border border-slate-300 (garis border), hover:bg-slate-50 (hover abu-abu muda), rounded-xl (sudut tumpul) -->
-                <button
-                  type="button"
-                  @click="closeModal"
-                  class="px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition duration-150 cursor-pointer"
-                >
-                  Batal
-                </button>
-
-                <!-- Tombol Simpan Submit Form -->
-                <!-- px-5 py-2.5 (padding), text-sm font-medium (font sedang), text-white (teks putih), bg-indigo-600 hover:bg-indigo-700 (latar biru indigo), rounded-xl (sudut tumpul), shadow-sm (bayangan halus), disabled:opacity-50 (redup saat sedang proses simpan) -->
-                <button
-                  type="submit"
-                  :disabled="isSaving"
-                  class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  <span v-if="isSaving" class="inline-flex items-center gap-1.5">
-                    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                    </svg>
-                    Menyimpan...
-                  </span>
-                  <span v-else>
-                    {{ isEditing ? 'Perbarui Produk' : 'Simpan Produk' }}
-                  </span>
-                </button>
-              </div>
-
-            </form>
-
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
+    <ProductModal
+      :is-open="isModalOpen"
+      :product="selectedProduct"
+      @close="closeModal"
+      @saved="loadProducts"
+    />
 
   </div>
 </template>
