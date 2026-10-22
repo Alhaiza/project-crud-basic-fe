@@ -1,92 +1,125 @@
-// Composable useAuth untuk mengelola autentikasi reaktif di Nuxt 4
+/**
+ * ==========================================================================================
+ * MODUL HELPER: useAuth (app/composables/useAuth.ts)
+ * ==========================================================================================
+ * Alur Kerja Utama:
+ * 1. Register : Kirim data user -> Terima Bearer Token dari Laravel -> Simpan ke cookie -> Simpan user ke state.
+ * 2. Login    : Kirim kredensial -> Terima Bearer Token dari Laravel -> Simpan ke cookie -> Simpan user ke state.
+ * 3. Me       : Ambil token dari cookie -> Panggil GET /api/me -> Update state data profil user.
+ * 4. Logout   : Panggil POST /api/logout di Laravel -> Hapus token di cookie & reset state -> Redirect ke /login.
+ * 
+ * Asal Variabel & Dependensi:
+ * - $api         : Berasal dari app/plugins/api.ts (Instance $fetch kustom dengan baseURL & auth header).
+ * - useNuxtApp   : Bawaan Nuxt (mengakses dependency injection Nuxt Context).
+ * - useCookie    : Bawaan Nuxt (membaca/menulis cookie browser & SSR header secara aman).
+ * - useState     : Bawaan Nuxt (state reaktif global yang aman dari data leak pada Server-Side Rendering).
+ * - computed     : Bawaan Vue 3 (menghitung nilai turunan otomatis berdasarkan perubahan state).
+ * - navigateTo   : Bawaan Nuxt (melakukan pengalihan rute halaman / redirect).
+ * ==========================================================================================
+ */
+
 export const useAuth = () => {
-  // 1. Mengakses instance $api kustom yang sudah diinjeksi oleh plugin api.ts
+  // Mengambil helper $api yang telah didaftarkan melalui defineNuxtPlugin di app/plugins/api.ts
   const { $api } = useNuxtApp()
 
-  // 2. State token berbasis cookie (disimpan di browser dan terbaca saat SSR)
+  // Menyimpan token otorisasi ke dalam HTTP Cookie browser bernama 'auth_token'.
+  // Sintaks generik <string | null> memastikan TypeScript memahami bahwa nilai token bisa bertipe string atau null.
   const token = useCookie<string | null>('auth_token', {
-    maxAge: 60 * 60 * 24 * 7, // Masa aktif cookie 7 hari dalam detik
-    path: '/',                // Berlaku untuk semua rute aplikasi
+    maxAge: 60 * 60 * 24 * 7, // Durasi aktif: 7 hari (dalam hitungan detik: 60dtk * 60mnt * 24jam * 7hari)
+    path: '/',                // Cookie berlaku untuk semua rute di domain ini
   })
 
-  // 3. State user reaktif global Nuxt yang aman dari state leak antar-request SSR
+  // State global user profile. Menggunakan useState('auth_user') agar nilai user tersinkronisasi
+  // di semua komponen Vue dan tidak bocor ke request pengguna lain saat proses SSR di server.
   const user = useState<any>('auth_user', () => null)
 
-  // 4. Getter status autentikasi: bernilai true jika token tersedia
+  // Computed Property: Menghasilkan boolean true/false secara otomatis.
+  // Sintaks '!!' (double negation): Mengubah nilai truthy string token menjadi boolean murni true,
+  // atau null/undefined menjadi false.
   const isAuthenticated = computed(() => !!token.value)
 
-  // 5. Fungsi Login: mengirim kredensial ke API Laravel dan menyimpan token
+  // ----------------------------------------------------------------------------------------
+  // ALUR FITUR: LOGIN
+  // ----------------------------------------------------------------------------------------
   const login = async (credentials: { email: string; password: string }) => {
-    // Memanggil endpoint POST /api/login via helper $api
+    // 1. Kirim request HTTP POST ke endpoint Laravel: /api/login (didefinisikan di routes/api.php)
     const response: any = await $api('/login', {
       method: 'POST',
       body: credentials,
     })
 
-    // Menyimpan token yang didapat dari response Laravel ke cookie auth_token
+    // 2. Ekstrak 'access_token' dari response JSON Laravel (ApiResponse trait: res.data.access_token)
+    // dan simpan langsung ke cookie 'auth_token'
     token.value = response.data.access_token
 
-    // Menyimpan profile user ke state reaktif global
+    // 3. Simpan objek data user ke dalam state reaktif global Nuxt
     user.value = response.data.user
 
     return response
   }
 
-  // 6. Fungsi Register: mendaftarkan user baru dan langsung mencatat token
+  // ----------------------------------------------------------------------------------------
+  // ALUR FITUR: REGISTER
+  // ----------------------------------------------------------------------------------------
   const register = async (payload: { name: string; email: string; password: string }) => {
-    // Memanggil endpoint POST /api/register
+    // 1. Kirim request HTTP POST ke endpoint Laravel: /api/register
     const response: any = await $api('/register', {
       method: 'POST',
       body: payload,
     })
 
-    // Menyimpan token baru ke cookie
+    // 2. Laravel otomatis me-generate token untuk pendaftar baru, simpan ke cookie
     token.value = response.data.access_token
 
-    // Menyimpan data user baru ke state
+    // 3. Simpan data user baru ke state global
     user.value = response.data.user
 
     return response
   }
 
-  // 7. Fungsi Fetch User Profile: mengambil data user yang sedang login dari /api/me
+  // ----------------------------------------------------------------------------------------
+  // ALUR FITUR: AMBIL PROFIL USER (SHOW DATA USER / ME)
+  // ----------------------------------------------------------------------------------------
   const fetchUser = async () => {
-    // Jika tidak ada token di cookie, batalkan pengambilan data
+    // Jika tidak ada token di cookie, batalkan pemanggilan API
     if (!token.value) return null
 
     try {
-      // Memanggil endpoint terproteksi GET /api/me
+      // Panggil GET /api/me. Plugin app/plugins/api.ts akan otomatis menyisipkan
+      // header "Authorization: Bearer <token>" dari cookie yang tersimpan.
       const response: any = await $api('/me')
       user.value = response.data
       return user.value
     } catch (error) {
-      // Jika token tidak valid / kedaluwarsa, bersihkan sesi
+      // Jika token ditolak atau kedaluwarsa di backend (401 Unauthorized), reset sesi lokal
       token.value = null
       user.value = null
       return null
     }
   }
 
-  // 8. Fungsi Logout: menghapus sesi di backend dan membersihkan cookie/state di frontend
+  // ----------------------------------------------------------------------------------------
+  // ALUR FITUR: LOGOUT
+  // ----------------------------------------------------------------------------------------
   const logout = async () => {
     try {
-      // Memanggil endpoint POST /api/logout di backend Laravel
+      // 1. Panggil POST /api/logout di Laravel untuk menghapus personal_access_tokens di database
       await $api('/logout', { method: 'POST' })
     } catch (error) {
-      // Abaikan error jika token di backend sudah kedaluwarsa
+      // Abaikan error jika token di backend ternyata sudah hangus/terhapus sebelumnya
     } finally {
-      // Menghapus nilai cookie auth_token di browser
+      // 2. Blok finally selalu dieksekusi: hapus cookie auth_token dari browser
       token.value = null
 
-      // Mereset state user global kembali menjadi null
+      // 3. Reset state user kembali menjadi null
       user.value = null
 
-      // Mengalihkan halaman pengguna kembali ke form login
+      // 4. Arahkan rute pengguna secara programmatic kembali ke form login
       await navigateTo('/login')
     }
   }
 
-  // Mengembalikan variabel dan fungsi agar dapat dipakai di halaman dan komponen
+  // Ekspor seluruh state dan method agar bisa diakses langsung via const { ... } = useAuth()
   return {
     token,
     user,
