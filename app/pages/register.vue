@@ -4,8 +4,9 @@ definePageMeta({
   middleware: 'guest',
 })
 
-// 2. Mengimpor fungsi register dari composable helper useAuth
+// 2. Mengimpor fungsi register dari composable helper useAuth dan helper useToast
 const { register } = useAuth()
+const toast = useToast()
 
 // 3. State reaktif untuk menampung field input registrasi user
 const form = reactive({
@@ -28,11 +29,16 @@ const handleRegister = async () => {
   try {
     // Mengirim data pendaftaran ke backend Laravel via useAuth
     await register(form)
+    // Notifikasi toast HIJAU (sukses registrasi)
+    toast.success('Pendaftaran akun berhasil! Selamat bergabung.')
     // Jika registrasi sukses, arahkan langsung ke halaman utama CRUD produk
     await navigateTo('/')
   } catch (err: any) {
     // Menampilkan pesan error validasi dari Laravel (misal email sudah terdaftar)
-    errorMessage.value = err?.data?.message || 'Registrasi gagal. Mohon periksa kembali data Anda.'
+    const msg = err?.data?.message || 'Registrasi gagal. Mohon periksa kembali data Anda.'
+    errorMessage.value = msg
+    // Notifikasi toast MERAH (gagal registrasi)
+    toast.error(msg)
   } finally {
     isLoading.value = false
   }

@@ -10,6 +10,9 @@ const { $api } = useNuxtApp()
 // 3. Mengakses data profil user, fungsi fetchUser, dan logout dari composable helper useAuth
 const { user, fetchUser, logout } = useAuth()
 
+// 3b. Mengakses helper notifikasi toast global untuk menampilkan respon di kanan atas layar
+const toast = useToast()
+
 // 4. State reaktif untuk menyimpan daftar produk dari backend
 const products = ref<any[]>([])
 
@@ -52,6 +55,7 @@ const loadProducts = async () => {
     products.value = res.data?.data || res.data || []
   } catch (error) {
     console.error('Gagal mengambil data produk:', error)
+    toast.error('Gagal memuat data produk dari server.')
   } finally {
     isLoading.value = false
   }
@@ -97,12 +101,16 @@ const handleSaveProduct = async () => {
         method: 'PUT',
         body: form,
       })
+      // Notifikasi toast HIJAU (sukses update)
+      toast.success('Data produk berhasil diperbarui!')
     } else {
       // Jika mode tambah: Panggil POST /api/products
       await $api('/products', {
         method: 'POST',
         body: form,
       })
+      // Notifikasi toast HIJAU (sukses tambah baru)
+      toast.success('Produk baru berhasil ditambahkan!')
     }
 
     // Tutup pop-out modal setelah berhasil simpan
@@ -111,7 +119,10 @@ const handleSaveProduct = async () => {
     await loadProducts()
   } catch (err: any) {
     // Menangkap pesan validasi error dari Laravel
-    modalError.value = err?.data?.message || 'Gagal menyimpan data produk.'
+    const errorMsg = err?.data?.message || 'Gagal menyimpan data produk.'
+    modalError.value = errorMsg
+    // Notifikasi toast MERAH (error)
+    toast.error(errorMsg)
   } finally {
     isSaving.value = false
   }
@@ -124,10 +135,13 @@ const handleDeleteProduct = async (id: number, name: string) => {
 
   try {
     await $api(`/products/${id}`, { method: 'DELETE' })
+    // Notifikasi toast HIJAU (sukses hapus)
+    toast.success(`Produk "${name}" berhasil dihapus!`)
     // Muat ulang data setelah dihapus
     await loadProducts()
   } catch (error) {
-    alert('Gagal menghapus produk.')
+    // Notifikasi toast MERAH (gagal hapus)
+    toast.error('Gagal menghapus produk dari server.')
   }
 }
 

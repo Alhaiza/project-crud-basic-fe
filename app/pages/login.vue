@@ -4,8 +4,9 @@ definePageMeta({
   middleware: 'guest',
 })
 
-// 2. Mengimpor fungsi login dari composable helper useAuth
+// 2. Mengimpor fungsi login dari composable helper useAuth dan helper useToast
 const { login } = useAuth()
+const toast = useToast()
 
 // 3. State reaktif untuk menampung input form (email dan password)
 const form = reactive({
@@ -29,11 +30,16 @@ const handleLogin = async () => {
   try {
     // Memanggil method login pada useAuth yang akan me-request ke Laravel /api/login
     await login(form)
+    // Notifikasi toast HIJAU (sukses login)
+    toast.success('Login berhasil! Selamat datang kembali.')
     // Jika berhasil, arahkan pengguna ke halaman dashboard/CRUD produk
     await navigateTo('/')
   } catch (err: any) {
     // Menangkap pesan error dari validasi backend Laravel
-    errorMessage.value = err?.data?.message || 'Email atau password yang Anda masukkan salah.'
+    const msg = err?.data?.message || 'Email atau password yang Anda masukkan salah.'
+    errorMessage.value = msg
+    // Notifikasi toast MERAH (gagal login)
+    toast.error(msg)
   } finally {
     // Matikan indikator loading baik request sukses maupun gagal
     isLoading.value = false
